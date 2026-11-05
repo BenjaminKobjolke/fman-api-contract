@@ -1,0 +1,14 @@
+tickets/
+tmp/
+tools/
+.claude/
+claude-plans/
+graphify-out/
+CLAUDE.md
+CODING_RULES.md
+IMPLEMENTATION_FLOW.md
+coding-rules.json
+HANDOFF.md
+PLAN*.md
+code_analysis_results/
+.reasonix/
