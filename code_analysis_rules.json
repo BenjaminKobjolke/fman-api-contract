@@ -1,0 +1,13 @@
+{
+  "fail_on": "warning",
+  "log_level": "all",
+  "global_exclude_paths": [
+    "tickets",
+    "graphify-out"
+  ],
+  "max_lines_per_file": {
+    "enabled": true,
+    "warning": 300,
+    "error": 500
+  }
+}

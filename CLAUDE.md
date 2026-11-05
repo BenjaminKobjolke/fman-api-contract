@@ -34,3 +34,14 @@ they are intentionally referenced, not imported.
 ## graphify
 
 Knowledge graph scan root: `.` (`/graphify . --directed`, live graph in root `graphify-out/`). This repository has no code; the graph covers `README.md` and the contract JSON files, everything else is excluded by `.graphifyignore`. Rule text: the graphify sections of `CODING_RULES.md` and `IMPLEMENTATION_FLOW.md`.
+
+## Code Analysis
+
+After an implementation or bug fix, run the changed-files analyzer:
+
+```bash
+cmd /c tools\analyze_changed_and_new_files.bat
+```
+
+It uses cli-code-analyzer's Python file-length rule for changed Python files. This repository
+currently contains contract JSON and documentation rather than application source code.
