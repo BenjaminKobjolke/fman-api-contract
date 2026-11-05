@@ -1,0 +1,637 @@
+<!-- Managed by /coding-rules:apply — do not edit rule blocks by hand -->
+<!-- Step file for plan runs, generated from CODING_RULES.md — CODING_RULES.md stays the complete rule set -->
+
+# Version
+17
+
+Increase this version number whenever this rule file changes.
+
+# Common Rules (All Languages)
+
+These rules apply to all projects, regardless of language. Language-specific rules live in the
+corresponding `*_RULES.md` files.
+
+---
+
+## Use Objects for Related Values
+
+When multiple related values must be passed between classes or methods, bundle them into a
+dedicated object (e.g., DTO/Settings/Config) instead of passing many parameters. This improves
+readability, reduces call-site churn, and makes changes safer.
+
+---
+
+## No Bag-of-Keys Returns at Module Boundaries
+
+When a public method on a manager/repository/service returns data that crosses a module
+boundary, the return type must be a typed object (DTO, value object, or domain model) — never
+a raw associative array indexed by string keys. Plain `array` returns silently swallow shape
+bugs: a missing key reads as `null`, a list-vs-single mix-up reads as "no data", and renames
+go undetected by static analysis.
+
+- **Anti-pattern.** `getSettingsValue(...)` returns `array|null`; callers do `$result['value']`,
+  `$result['type']`. A consumer mis-indexes `$result[0]['value']` after a refactor; nothing
+  flags the change. The function silently returns `null` and downstream defaults take over.
+- **Correct pattern.** Return a class — `getSettingsElement(...): ?SettingsElement`. The class
+  exposes `getValue()`, `getType()`, `exists()`. Typed, autocompleted, statically checked;
+  renames propagate via the IDE.
+- **Lists vs single must be obvious from the type and the name.** `getThing(): ?Thing`
+  (zero or one) vs `getThings(): ThingList` or `iterable<Thing>`. Never overload the same
+  return type to mean both.
+- **Distinguish absent from empty.** `null` from a lookup means "not found"; an empty
+  collection means "found, but had nothing". A typed return makes this contract explicit;
+  a bag-of-keys array hides it.
+- **JSON-decoded blobs are arrays too.** The rule applies equally to `json_decode($column, true)`
+  results that cross a module boundary — wrap them in a value object before they leave the
+  layer that owns the schema.
+- **Internal helpers may stay arrays.** This rule targets *public* API on managers and the
+  boundary where a domain abstraction starts. Pure-private array juggling inside a single
+  method is fine.
+
+---
+
+## Reuse Existing Models Before Inventing Array Shapes
+
+Before designing a new return type or DTO, search the codebase for an existing domain class
+that already owns the same data. Most "should this be a DTO?" decisions are actually
+"is there already a `Contest` / `User` / `Order` class that should absorb this method?"
+
+- Grep for the table name, the primary key, and the most distinctive column.
+- If a model already exists with a constructor that accepts the row shape, use it — don't
+  invent a parallel array shape that mirrors the same columns.
+- Adding a `getXxxObject()` alongside a legacy `getXxxData()` is acceptable as a migration
+  step; keep both only until consumers are migrated, then delete the array-returning version.
+
+---
+
+## Tests Pin the Shape Before the Refactor
+
+When converting a bag-of-keys return to a typed object, write a **characterization test
+first** that locks the current behavior using the existing API, run it green against the
+unrefactored code, and then refactor. The same test (or a renamed-but-equivalent one) must
+remain green afterward.
+
+This converts "I think the new object preserves behavior" into "the test proves it." Pair
+with the "Test-Driven Development" rule below — characterization tests are TDD applied to
+refactors instead of new features.
+
+---
+
+## Test-Driven Development for Features and Bug Fixes
+
+Follow TDD when implementing features or fixing bugs:
+
+1. Write tests first
+2. Run the tests and confirm they fail
+3. Implement the change or fix
+4. Run the tests again and confirm they pass
+
+---
+
+## Integration Tests
+
+Every project must include integration tests in addition to unit tests. Integration tests verify that
+components work correctly together and catch issues that unit tests alone cannot detect.
+
+---
+
+## Prefer Type-Safe Values
+
+Use strong, explicit types instead of loosely typed or stringly typed values (e.g., typed DTOs,
+enums, generics, typed settings). This ensures mistakes are caught at compile time or by tests
+early in development.
+
+---
+
+## String Constants
+
+Centralize string constants in a dedicated module/class. Do not scatter raw strings across
+the codebase. Use language-appropriate patterns for constants and reuse them consistently.
+
+---
+
+## Reusable Tooling
+
+Before building project-specific infrastructure scripts (audits, codemods,
+build helpers, lint checks, etc.) for a project, check the matching
+language's `*_setup_files/` folder under this `coding-rules` repo for an
+existing equivalent. If found, copy or reference it. If not:
+
+1. Build the script in the project and prove it on real data.
+2. Copy the script into the right `*_setup_files/tools/` folder.
+3. Document it in that language's `*_RULES.md` so the next project picks
+   it up automatically.
+
+This keeps cross-project tooling consistent and prevents the same script
+from being re-invented in every new project.
+
+---
+
+## New Projects Start From a Template
+<!-- steps: plan -->
+
+Before creating a new project (an API, an app, a tool — anything that gets its own folder),
+ask the user whether a template project exists for that kind of project. Never scaffold from
+scratch without asking.
+
+- Run `/coding-rules:new-project`: it suggests the template remembered for that project type
+  in `~/.coding-rules/settings.json`, asks, and remembers a newly chosen template for next time.
+- A remembered template is a suggestion — still ask, the user may want another one or none.
+
+---
+
+## README.md is Mandatory
+
+Every project must have a `README.md` file in the root directory. It should include:
+
+- Project name and description
+- Installation/setup instructions
+- Usage examples
+- Dependencies and requirements
+
+---
+
+## Don't Repeat Yourself (DRY)
+
+Avoid code duplication. If the same logic appears in multiple places, extract it into a
+reusable function, class, module, or utility.
+
+- Duplicate code is harder to maintain and leads to bugs
+- Extract shared logic into helpers or base abstractions
+- Use constants for repeated values
+
+---
+
+## Derive, Don't Duplicate — One Value Owns the Derivation
+
+When one value strictly determines another, pass only the determinant and derive the rest —
+never thread both side-by-side through call sites, constructors, and events. Two co-varying
+parameters are a functional dependency in disguise; passing both lets them drift into illegal
+combinations.
+
+- **Anti-pattern.** `createLog(ActionCategory $cat, ActionType $type)` threaded through ~10
+  sites. Nothing stops a caller passing `category: email, type: lead.created`.
+- **Correct pattern.** The richer type owns the relationship: `ActionType::category()` returns
+  its `ActionCategory` via a single exhaustive `match`. Call sites pass only `ActionType`;
+  category is always derived, so a mismatch is unconstructable.
+- **Apply when** one value *determines* the other (a true functional dependency).
+- **Don't apply when** the relationship is many-to-many or genuinely independent — forcing a
+  derivation that doesn't exist couples things that should stay separate.
+- **Keep derivation cheap and pure** — a getter/match, no DB or IO behind a call that looks free.
+- **Keep the mapping exhaustive** (enum + exhaustive match) so a new case cannot silently skip
+  its derived value.
+
+This is Single Source of Truth applied to parameters, and a form of "make illegal states
+unrepresentable." Pairs with "Prefer Type-Safe Values" and "Self-Describing Classes".
+
+---
+
+## Keep It Simple (KISS)
+
+Prefer the simplest solution that actually works. Complicated logic for a simple result must be
+kept to a minimum — a future maintainer (or you, at 3am) has to understand it.
+
+- **YAGNI.** Don't build for a need that isn't here yet: no interface with a single
+  implementation, no factory for one product, no config for a value that never changes.
+- **Boring over clever.** Clever is what someone decodes later. The obvious solution wins.
+- **Deletion over addition.** The shortest working change is usually the right one.
+- Pairs with "Don't Repeat Yourself" and "No God Classes" — simplicity is what those rules
+  are protecting.
+
+---
+
+## Confirm Dependency Versions
+
+When adding a new package or library, choose its version yourself from verified facts. Do not
+ask the user to confirm a routine version choice.
+
+- Never assume a version from memory: check the authoritative release source (the package
+  registry or the project's official releases) for the latest stable release.
+- Check the project's constraints: runtime/SDK version, the existing lock file, peer
+  dependencies and the package's supported platforms.
+- Use the latest stable release that satisfies them. Skip pre-releases (alpha, beta, rc, dev).
+- Pin or lock the resolved version the way the project already does (lock file, exact pin, or
+  its range convention), and name the chosen version and where it was checked in the plan or
+  change summary.
+- A version the user specified wins.
+- Ask the user only when a real tradeoff remains: the latest stable needs a new major line or a
+  runtime upgrade, supported versions conflict, a security advisory affects the candidate, or
+  the release source cannot be checked.
+- Avoid outdated packages that may have security vulnerabilities or missing features.
+
+---
+
+## Error Handling & Logging Strategy
+
+Every project must have a centralized error handler rather than ad-hoc try/catch blocks scattered
+throughout the codebase.
+
+- Use structured logging (not `print`/`console.log`/`echo`)
+- Log at appropriate levels: debug, info, warning, error
+- Include context in log messages (module name, operation, relevant IDs)
+
+---
+
+## Centralized Logger — Single Off Switch
+
+Route all logging through one dedicated logger class/module. Never call the language's
+built-in output directly for logging (`print`, `console.log`, `echo`, `Debug.Log`,
+`System.out`). Code calls the project logger; the project logger wraps the underlying sink.
+
+- **One toggle.** Because every log goes through one place, logging can be turned off,
+  level-filtered, or redirected (file, console, remote) from a single config flag — without
+  touching call sites. Example: a `logEnabled` / `logLevel` setting the logger checks once.
+- **Levels live in the logger.** Callers pass a level (debug/info/warning/error); the logger
+  decides what is emitted based on central config. Callers never branch on "should I log?".
+- **Wrap, don't scatter.** Built-in calls (`print`, framework loggers, `Debug.Log`) appear
+  in exactly one file — the logger implementation. Everywhere else imports the logger.
+- **Language specifics** still apply (e.g. Unity `[Conditional]` stripping, Flutter `logger`
+  package, Python `logging`) — but they are configured inside the central logger, not at
+  call sites.
+
+The logger's name is fixed per language so it is the same known type in every project (see each
+`*_RULES.md` for details):
+
+| Language      | Class / export     | File                |
+|---------------|--------------------|---------------------|
+| Python        | `AppLogger`        | `app_logger.py`     |
+| PHP           | `Logger`           | `Logger.php`        |
+| Dart/Flutter  | `AppLogger`        | `app_logger.dart`   |
+| Kotlin        | `AppLogger`        | `AppLogger.kt`      |
+| C# (plain)    | `AppLogger`        | `AppLogger.cs`      |
+| C++           | `AppLogger`        | `AppLogger.h` / `AppLogger.cpp` |
+| Unity C#      | `GameLog` (static) | `GameLog.cs`        |
+| Svelte/JS/TS  | `logger` (export)  | `logger.ts`         |
+| Arduino       | `Log`              | `Log.h` / `Log.cpp` |
+| Rust          | `log` / `tracing` facade, `app_logger::init()` | `app_logger.rs` |
+
+---
+
+## Input Validation at Boundaries
+
+Always validate data at system boundaries — API inputs, user input, file uploads, external service
+responses.
+
+- Never trust external data; validate before processing
+- Use language-appropriate validation libraries (e.g., Pydantic, Zod, FluentValidation)
+- Fail fast with clear error messages when validation fails
+
+---
+
+## API Clients: the API Sorts, Filters and Pages (BINDING)
+
+Applies to every project that reads data from an API — app, SPA, desktop tool, script.
+
+- **Show what the API returns, in the order it returns it.** Never download a whole collection
+  to sort, filter, search, count, group or join it locally.
+- **Read lists page by page.** Send the page size and position and load the next page when the
+  user scrolls or asks for more. Never loop over all pages to rebuild the full list on start or
+  on refresh.
+- **A new order, filter or search is a new request** with that parameter, starting at the first
+  page. Reordering the rows already held is wrong as soon as the list is paged: the client holds
+  one page, not the list.
+- **Do not download again what you already hold.** After a create, update or delete use the row
+  the response returned, or re-request the visible page — not the whole collection.
+- **A missing parameter is API work.** When an API you own lacks the sort, filter, search,
+  paging or count a screen needs, request it from the API project (linked todo or
+  `/feedback:write`) and plan against that. "The list is small or unpaged today, so the client
+  can do it" is not a reason. For a third-party API that cannot change, use the paging and
+  sorting it offers and mark any remaining local work with a comment naming the missing
+  capability.
+
+The server half is `project_type/REST_API.md` -> "List Endpoints: Paging, Sorting, Filtering".
+
+---
+
+## Shared Contract Repository for API and Clients (BINDING)
+
+When two or more projects we own talk over the wire — an API plus an app, an API plus a desktop
+app, or all three — keep their shared values in one contract repository. This does not apply to
+third-party APIs.
+
+- **Why:** each side keeps its own copy of every value that crosses the wire. When one side adds a
+  value the other does not know, the other side can break (for example, the API added a todo type
+  and the watcher rejected the whole todo list).
+- **One separate repository** (`<system>-contract`) holds the contract: at minimum every shared
+  enum in `enums.json`, shaped as `"<Name>": {"values": [sorted unique], "direction":
+  "api_to_client" | "client_to_api", "description": "<where it appears>"}`, plus a `README.md`
+  with the change rules and the list of consumers. Do not add version numbers; the submodule
+  pointer is the version.
+- **Every project includes it as a git submodule at `contract/`.** Pick up changes with
+  `git submodule update --remote contract` and commit the pointer bump. Production code never
+  reads `contract/`; it is test input only.
+- **The API is the producer:** export the contract from its own constants (one map, one export
+  script) and add a freshness test that fails when the committed file differs from the export.
+- **Each client is a consumer:** test that every mapped enum matches the contract in its
+  direction (`api_to_client` sets are equal so the client knows every value;
+  `client_to_api` client values are a subset) and that every contract name is mapped.
+- Both tests skip when `contract/` is not checked out.
+- **Change order:** for an `api_to_client` value, update the contract, release clients that know
+  it, then have the API emit it. For a `client_to_api` value, update the contract and API first,
+  then have the client send it. To remove a value, stop it at the API, then remove it from the
+  contract, then from clients. Never rename a value; renaming is an add plus a remove. Add a new
+  shared enum to the contract in the same change that introduces it.
+- Clients still tolerate an unknown value (skip the row; do not fail the whole response) as a
+  last line of defence, not as permission to skip the order.
+- **Setting it up** is work in each project: when one project of the system lacks the submodule
+  or its test, request it there (linked todo or `/feedback:write`).
+
+---
+
+## Upstream Forks
+
+In a fork that merges changes from an upstream project, these rules apply to new and changed code
+only. Do not reformat, rename, move, or refactor upstream code that the task does not need. Prefer
+new files for features, and keep project-specific setup in new files plus the `CLAUDE.md` pointer
+so upstream merges stay clean.
+
+---
+
+## Coding-Rules Plugin Updates in Tickets Watcher Runs
+
+A todo may need a rules version that is published in the coding-rules marketplace but not
+installed on this machine yet (for example a new rule file). A Tickets Watcher run — a phase the
+watcher started for a todo, working from `tickets/<id>/` — may install it itself. Any other
+session asks the user to update the plugin instead.
+
+- **Precondition check.** Read `claude plugin list --json` and take the entry
+  `coding-rules@<marketplace>`. The check passes only when its `version` is at least the
+  required version and `<installPath>/rules/<required rule file>` exists. Use `installPath`;
+  never build the cache path by hand.
+- **Bounded update.** Only when the check fails, run exactly these two commands, then check
+  again:
+  1. `claude plugin marketplace update <marketplace>` (the marketplace of the plugin id, today
+     `claude-coding-rules`);
+  2. `claude plugin update coding-rules@<marketplace> --scope user --json`.
+  Nothing else: no `install`, `uninstall`, `enable` or `disable`, no other plugin or
+  marketplace, no `-y` and no `--accept-command`.
+- **Stop when it does not work.** When a command exits non-zero, asks to confirm a command, or
+  the second check still fails, stop with `OUTCOME: blocked` and
+  `BLOCKER: coding-rules <version> with <rule file> is not installed`, quoting the CLI output.
+- **Never edit machine-managed plugin files.** No agent copies files into, or edits anything
+  under, `~/.claude/plugins/` (cache, `installed_plugins.json`, marketplaces) — not in a watcher
+  run either.
+- **Published first.** The update installs only what the marketplace source holds. The rules
+  todo that adds the version must be done (its `plugin.json` version bumped, and pushed when the
+  source is a git remote). When the source lacks the version, the update cannot help: wait for
+  that todo instead.
+- **Next process.** The run that updated keeps the plugin it started with. Read the new rule
+  files from `installPath`, or let the dependent work continue in a later watcher run.
+- **Planning.** A plan run checks the installed version read-only with
+  `claude plugin list --json` and records it in the plan's context. When it is too old, the
+  plan's first ordered step is "check, update if needed, check again" as above, before any work
+  that needs the rules. It is an ordered step the implement run does, not a by-hand step.
+  Dependent work resumes only after that check passes.
+
+---
+
+## Maximum File Length — 300 Lines
+
+Split files when they exceed 300 lines to keep code navigable during fast iteration.
+
+- Extract classes, functions, or components into separate modules
+- Group related extractions logically (by domain, not by type)
+- Exceptions: generated files, configuration files, test files with many similar cases
+
+---
+
+## Naming Conventions
+
+Be consistent within a project. Follow these defaults unless the language or framework dictates
+otherwise:
+
+- Files: `snake_case` (or language convention, e.g., `PascalCase` for C# classes)
+- Classes: `PascalCase`
+- Functions/methods: language convention (`snake_case` for Python/PHP, `camelCase` for Dart/JS/C#)
+- Constants: `UPPER_SNAKE_CASE`
+- Variables: language convention (`snake_case` for Python/PHP, `camelCase` for Dart/JS/C#)
+
+---
+
+## Comments Explain Why, Not What
+
+Comment intent and non-obvious reasoning — not a restatement of the code. Good names carry the
+*what*; comments carry the *why*.
+
+- **Anti-pattern.** `i++ // increment i`. Redundant comments add noise and rot the moment the
+  code changes.
+- **Correct pattern.** Document *why* a workaround exists, why a non-obvious algorithm was
+  chosen, or a constraint that isn't visible locally (`// API rejects batches > 500`).
+- Prefer self-documenting code (clear names, small functions) over a comment that compensates
+  for unclear code — see "Naming Conventions" and "Keep It Simple".
+- Document the purpose of each module/class at its top.
+- Keep comments in sync with the code; delete stale ones rather than letting them mislead.
+
+---
+
+## Security Baseline
+
+Every project must follow these minimum security practices:
+
+- Never commit secrets (`.env`, API keys, credentials, private keys)
+- Escape output to prevent XSS/injection attacks
+- Use parameterized queries or ORM-provided methods — never concatenate user input into queries
+- Validate and sanitize all user input at system boundaries
+- Keep dependencies updated to avoid known vulnerabilities
+
+---
+
+## No Hardcoded Environment Values
+
+Never hardcode environment-specific values in code — filesystem paths, hostnames, IP addresses,
+ports, base URLs. They differ across machines and environments and make code non-portable.
+
+- **Anti-pattern.** `connect("192.168.1.50:5432")`, `open("C:\\Users\\bob\\data\\out.json")`.
+- **Correct pattern.** Read them from the project's central config (the config class each
+  `*_RULES.md` already mandates), with a committed `.example` template documenting every key.
+- Distinct from the secrets rule above: this is about **portability** (runs anywhere), not
+  secrecy. A non-secret hostname still belongs in config, not in code.
+
+---
+
+## No God Classes
+
+A class that handles too many responsibilities becomes fragile, hard to test, and impossible to
+reuse. Keep each class focused on a single purpose.
+
+- **Warning signs**: more than 5 public methods, more than 4 constructor dependencies, or methods that span unrelated domains (e.g., a class that validates input, queries the database, and sends emails)
+- Split by responsibility: extract collaborators (e.g., a `Validator`, a `Repository`, a `Notifier`) rather than piling logic into one class
+- If you struggle to name the class without using "Manager", "Handler", "Service", or "Helper" as a catch-all, it likely does too much
+- This complements the 300-line file rule — a short class can still be a god class if it owns too many concerns
+
+---
+
+## Self-Describing Classes
+
+When behavior depends on which fields or properties a class has — such as search, serialization,
+display, validation, or auditing — the class itself must declare those fields through a contract
+(interface, abstract method, attribute/annotation, or introspection pattern). Never hardcode field
+lists in consuming code.
+
+- **Anti-pattern**: A search service contains a hardcoded list of fields to index for each entity;
+  adding a new field requires updating every consumer manually
+- **Correct pattern**: Each class implements a contract (e.g., `GetSearchableFields()`,
+  `GetDisplayColumns()`) that returns its own relevant fields, so adding a field in one place
+  automatically propagates everywhere
+- This applies to any cross-cutting concern that operates over class fields: search, filtering,
+  export, form generation, diffing, logging, etc.
+- Combine with compile-time checks where the language supports them (e.g., sealed interfaces,
+  exhaustive matching) to ensure new fields cannot be silently ignored
+
+---
+
+## Search Across Partial Words
+
+When implementing user-facing search, split the query on whitespace and match every term as a
+case-insensitive substring of the searchable text, regardless of term order. For example,
+`release bat` should find `release_build.bat`. Preserve the project's existing searchable fields.
+
+---
+
+## Inject Collaborators, Don't Fold Dependencies In
+
+Composition reuse comes in two shapes, and they differ sharply in how much coupling they add to
+the reusing class. **Folding** a helper into a class (mixin, trait, multiple inheritance, copy-in
+include) merges *all of the helper's own dependencies* into that class — reuse five such helpers
+and every one of their imports is now the host's coupling. **Injecting** a collaborator adds a
+single dependency: the collaborator, which is built once and shared as a hub.
+
+Prefer injected collaborators. Reserve fold-in reuse for helpers that are stateless and carry no
+dependencies of their own.
+
+- **Anti-pattern**: A controller reuses five behavior mixins/traits; each brings its own service,
+  DTO, and constant imports, so the controller transitively depends on a few dozen things and is
+  hard to test in isolation.
+- **Correct pattern**: Extract that behavior into a collaborator object injected via the
+  constructor. The controller depends on the collaborator; the collaborator is reused across many
+  controllers as a shared, well-tested hub.
+
+### Inject services; never instantiate one inside a method
+
+Constructing a service with `new` (or the language equivalent) inside a method hides the
+dependency from the class's public contract and makes it impossible to substitute in a test. Pass
+collaborators in through the constructor.
+
+- **Anti-pattern**: A method does `helper = new EmailPreparer(); helper.prepare(...)`. Nothing in
+  the class signature reveals the dependency, and no test can replace it.
+- **Correct pattern**: Inject `EmailPreparer` once; the method calls the injected instance.
+
+### Collapse config-callback swarms into one value object
+
+When a base class pulls its configuration from the subclass through many small overridable getters
+that the subclass fills in one-line-each, each getter is a separate touch-point and the wiring is
+spread across dozens of methods. Bundle the related values into a single config object built once
+and handed to the base (see **Use Objects for Related Values**). This also keeps such classes off
+the wrong side of **No God Classes**.
+
+- **Anti-pattern**: A subclass implements `getSendEndpoint()`, `getSendSuccessKey()`,
+  `getSendFailureRedirect()`, and a dozen more one-line getters, each naming one constant.
+- **Correct pattern**: The subclass builds one `SendConfig` value object once; the base reads its
+  fields.
+
+# Version
+1
+
+Increase this version number whenever this rule file changes.
+
+# API Contract Repository Rules
+
+These rules apply to a repository that holds a shared API contract as JSON and a README, with no
+application code. The API produces the contract; client projects consume it as a Git submodule.
+
+## Layout
+
+Keep contract JSON files and `README.md` in the repository root. Do not add application code,
+build steps, or version numbers. A client's submodule pointer identifies the contract version.
+
+## Entry format
+
+Each entry is keyed by its shared name and has a `values` list, a `direction`, and a `description`:
+
+```json
+"TodoType": {
+  "values": ["implementation", "research"],
+  "direction": "api_to_client",
+  "description": "Todo.type"
+}
+```
+
+Keep values sorted and unique. The description names where each value appears in the API.
+
+## Direction semantics
+
+- `api_to_client`: a client mirror must equal the contract values so clients recognize every
+  value the API can send.
+- `client_to_api`: a client mirror must be a subset of the contract values so the API accepts
+  every value the client can send.
+
+## Producer and consumer roles
+
+The API is the producer. It exports the contract from its own constants, and a test checks that
+the committed contract is fresh. Each client is a consumer: its tests compare its own enum mirrors
+with this contract using the direction semantics above, and skip when `contract/` is not checked
+out.
+
+## Submodule usage
+
+Clients mount this repository at `contract/` and commit pointer updates when they take a contract
+change. Use `GIT: bump <name> submodule` as the pointer-bump commit message. Production code must
+not read `contract/`; it is test input only.
+
+## README sync
+
+Update the README notes in the same commit as every contract change. Keep the producer, consumers,
+usage, and relevant change-order notes accurate.
+
+## Validation
+
+Before committing, verify that every contract JSON file is valid, every `values` list is sorted and
+unique, and every `direction` is either `api_to_client` or `client_to_api`. Run the repository's
+contract check script or validate the JSON with `python -m json.tool`.
+
+## Not applicable
+
+Language rules, `DESIGN_RULES.md`, and code analyzers do not apply because this repository has no
+application code. `/analyze:setup` is not needed because there is no code for an analyzer to inspect.
+
+# Version
+15
+
+Increase this version number whenever this rule file changes.
+
+# graphify Knowledge Graph (Optional Addon)
+
+graphify turns a code folder into a queryable knowledge graph — god nodes, communities,
+cross-file relationships, fan-in/fan-out. Use it to orient before grep and to spot god classes.
+
+**Keep the build AST-only (no LLM, no API cost) by scoping to the code dir.** graphify runs a
+free deterministic AST pass on *code* files, but a separate **LLM pass** on every *non-code*
+file — docs, `.md`, `.txt`, config `.yaml`, images (vision), audio/video (whisper). That pass
+needs an LLM (Gemini key or the host agent) and costs tokens. A build scoped to a pure-code dir
+(`lib/`, `src/`, `app/`) has zero non-code files, so it skips the LLM pass entirely and rebuilds
+need no AI. A repo-root build (`/graphify .`) sweeps in `docs/`, `README.md`, icons, and sound
+assets — forcing the LLM pass. **Always scope to the code dir; never build the repo root.**
+
+---
+
+Setup instructions live in the coding-rules plugin at `graphify_setup_files/SETUP.md`.
+
+## What the graph knows (and does not)
+
+- Knows: code structure — classes, methods, calls, references, extends/implements, plus
+  fan-in/fan-out and community / god-node structure.
+- Does NOT know: business rules, API response shape, or rendered template/view output. It is a
+  snapshot — stale until rebuilt. Constants referenced by string can appear as isolated nodes
+  (AST limitation, not a missing dependency).
+
+---
+
+## Using the graph
+
+- For codebase questions, run `graphify query "<question>"` first when `graphify-out/graph.json`
+  exists. `graphify path "<A>" "<B>"` for relationships; `graphify explain "<concept>"` for a
+  focused node. These return a small scoped subgraph vs. reading GRAPH_REPORT.md or raw grep.
+- Judge coupling by direction: high **fan-in** + low fan-out (shared base / constants / DTO) is
+  healthy; high **fan-out** (>~20 outgoing deps) is god-class risk and a refactor signal.
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review, or when
+  query/path/explain do not surface enough context.
