@@ -11,7 +11,9 @@
     "PluginSource": {
         "values": [
             "catalog",
-            "github"
+            "forgejo",
+            "github",
+            "gitlab"
         ],
         "direction": "api_to_client",
         "description": "PluginListEntry.source"
