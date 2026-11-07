@@ -1,0 +1,19 @@
+{
+    "PluginOs": {
+        "values": [
+            "Linux",
+            "Mac",
+            "Windows"
+        ],
+        "direction": "api_to_client",
+        "description": "PluginListEntry.os"
+    },
+    "PluginSource": {
+        "values": [
+            "catalog",
+            "github"
+        ],
+        "direction": "api_to_client",
+        "description": "PluginListEntry.source"
+    }
+}
