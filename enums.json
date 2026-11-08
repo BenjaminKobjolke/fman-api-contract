@@ -17,5 +17,24 @@
         ],
         "direction": "api_to_client",
         "description": "PluginListEntry.source"
+    },
+    "SyncedSettingsKind": {
+        "values": [
+            "command_keywords",
+            "command_titles",
+            "key_bindings",
+            "viewer_key_bindings"
+        ],
+        "direction": "client_to_api",
+        "description": "settings sync path segment {kind}"
+    },
+    "SyncedSettingsOs": {
+        "values": [
+            "Linux",
+            "Mac",
+            "Windows"
+        ],
+        "direction": "client_to_api",
+        "description": "settings sync path segment {os}"
     }
 }
