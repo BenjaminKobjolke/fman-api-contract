@@ -101,7 +101,8 @@ There is no delete operation.
 - An unknown `os` or `kind` returns `404` because the route does not match.
 - Wrong `content` type, content larger than 262144 encoded bytes, a missing field, or a
   non-integer non-null `base_revision` returns `422` in the existing
-  `{"error": true, "message": "...", "errors": ...}` form.
+  `{"error": true, "message": "...", "details": {"<field>": "<message>"}}` form, where
+  `details` maps each invalid field to its error message.
 - A missing or invalid bearer token returns `401`.
 
 ### Change order
