@@ -1,4 +1,13 @@
 {
+    "AppErrorKind": {
+        "values": [
+            "manual",
+            "plugin",
+            "unhandled"
+        ],
+        "direction": "client_to_api",
+        "description": "AppErrorReport.kind"
+    },
     "PluginOs": {
         "values": [
             "Linux",
